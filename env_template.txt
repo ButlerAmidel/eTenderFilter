@@ -1,0 +1,15 @@
+# Copy this file to .env and fill in your actual values
+
+# OpenAI Configuration
+# Get your API key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Email Configuration (Gmail)
+# Use your Gmail address and App Password (not regular password)
+# Note: Use App Password, not your regular Gmail password
+SENDER_EMAIL=your_email@gmail.com
+SENDER_PASSWORD=your_app_password_here
+
+# Optional: Custom SMTP Settings (defaults to Gmail)
+# SMTP_SERVER=smtp.gmail.com
+# SMTP_PORT=587 

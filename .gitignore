@@ -1,0 +1,53 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+vectorstore/
+chat_history.json
+email_tracking.json
+
+# Generated files (keep these hidden)
+FilteredTenders/filtered_tenders_*.xlsx
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db 

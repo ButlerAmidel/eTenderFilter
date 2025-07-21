@@ -1,0 +1,68 @@
+{
+  "clients": [
+    {
+      "name": "Actuarial",
+      "enabled": true,
+      "keywords": [
+        "Actuarial",
+        "Reserving",
+        "Pricing Models",
+        "Solvency",
+        "Claims Modelling",
+        "Insurance Risk",
+        "Capital Adequacy"
+      ],
+      "distribution_emails": [
+        "butlermasango01@gmail.com"
+      ]
+    },
+    {
+      "name": "IT",
+      "enabled": true,
+      "keywords": [
+        "Microsoft Licenses",
+        "Cybersecurity",
+        "Network Security",
+        "Web Development",
+        "System Integration",
+        "Servers",
+        "IT Infrastructure",
+        "Cloud Services",
+        "Internet"
+      ],
+      "distribution_emails": [
+        "butlermasango01@gmail.com"
+      ]
+    },
+    {
+      "name": "Others",
+      "keywords": [
+        "PowerBI",
+        "Risk Management",
+        "Artificial Intelligence"
+      ],
+      "distribution_emails": [
+        "butlermasango01@gmail.com"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "Quant",
+      "keywords": [
+        "Quantitative",
+        "Financial Modelling",
+        "Derivatives",
+        "Risk Analytics",
+        "Portfolio Optimization",
+        "Monte Carlo Simulation",
+        "Option Pricing",
+        "Financial Engineering",
+        "Credit risk"
+      ],
+      "distribution_emails": [
+        "butlermasango01@gmail.com"
+      ],
+      "enabled": true
+    }
+  ]
+}
