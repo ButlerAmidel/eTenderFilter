@@ -23,6 +23,9 @@ class StreamlitApp:
     def __init__(self):
         """Initialize the Streamlit application"""
         try:
+            # Setup secrets from Streamlit Cloud
+            self._setupSecrets()
+            
             self.configManager = ConfigManager()
             self.tenderProcessor = TenderProcessor()
             self.aiFilter = AIFilter()
@@ -44,6 +47,20 @@ class StreamlitApp:
         
         except Exception as e:
             st.error(f"Error initializing app: {str(e)}")
+    
+    def _setupSecrets(self):
+        """Setup environment variables from Streamlit secrets if available"""
+        try:
+            if hasattr(st, 'secrets'):
+                # Load secrets into environment variables for compatibility
+                if 'OPENAI_API_KEY' in st.secrets:
+                    os.environ['OPENAI_API_KEY'] = st.secrets['OPENAI_API_KEY']
+                if 'SENDER_EMAIL' in st.secrets:
+                    os.environ['SENDER_EMAIL'] = st.secrets['SENDER_EMAIL']
+                if 'SENDER_PASSWORD' in st.secrets:
+                    os.environ['SENDER_PASSWORD'] = st.secrets['SENDER_PASSWORD']
+        except Exception as e:
+            print(f"Error setting up secrets: {str(e)}")
     
 
     
