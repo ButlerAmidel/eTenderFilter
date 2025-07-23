@@ -27,8 +27,11 @@ class AIFilter:
         self.client = openai.OpenAI(api_key=apiKey)
         self.confidenceThreshold = confidenceThreshold
         
-        # Initialize LangChain components
-        self.embeddings = OpenAIEmbeddings(api_key=apiKey)
+        # Store API key for lazy initialization
+        self.apiKey = apiKey
+        
+        # Initialize basic components
+        self.embeddings = None  # Will be initialized when needed
         self.vectorstore = None
         self.tender_documents = []
         self.current_data_hash = None
@@ -102,6 +105,16 @@ Closing Date: {tender.get('CLOSING_DATE', 'N/A')}
         
         return documents
 
+    def _initialize_embeddings(self):
+        """Initialize embeddings only when needed"""
+        if self.embeddings is None:
+            try:
+                self.embeddings = OpenAIEmbeddings(api_key=self.apiKey)
+                print("Embeddings initialized successfully")
+            except Exception as e:
+                print(f"Error initializing embeddings: {str(e)}")
+                raise e
+    
     def _get_data_hash(self, tenders: pd.DataFrame) -> str:
         """Generate a hash of the tender data to check if we need to rebuild vector store"""
         import hashlib
@@ -112,6 +125,9 @@ Closing Date: {tender.get('CLOSING_DATE', 'N/A')}
         """Build or rebuild the vector store from tender data"""
         try:
             print("Building vector store from tender data...")
+            
+            # Initialize embeddings if needed
+            self._initialize_embeddings()
             
             # Convert tenders to documents
             self.tender_documents = self._create_tender_documents(tenders)
