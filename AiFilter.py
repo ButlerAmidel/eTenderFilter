@@ -131,27 +131,41 @@ Closing Date: {tender.get('CLOSING_DATE', 'N/A')}
             print("Building vector store from tender data...")
             
             # Initialize embeddings if needed
-            self._initialize_embeddings()
+            try:
+                self._initialize_embeddings()
+                print("✅ Embeddings initialized successfully")
+            except Exception as e:
+                print(f"❌ Error initializing embeddings: {str(e)}")
+                return False
             
             # Convert tenders to documents
-            self.tender_documents = self._create_tender_documents(tenders)
-            print(f"Created {len(self.tender_documents)} tender documents")
+            try:
+                self.tender_documents = self._create_tender_documents(tenders)
+                print(f"✅ Created {len(self.tender_documents)} tender documents")
+            except Exception as e:
+                print(f"❌ Error creating documents: {str(e)}")
+                return False
             
             # Create vector store
-            self.vectorstore = Chroma.from_documents(
-                documents=self.tender_documents,
-                embedding=self.embeddings,
-                persist_directory=str(self.vectorstore_dir)
-            )
+            try:
+                self.vectorstore = Chroma.from_documents(
+                    documents=self.tender_documents,
+                    embedding=self.embeddings,
+                    persist_directory=str(self.vectorstore_dir)
+                )
+                print("✅ Vector store created successfully")
+            except Exception as e:
+                print(f"❌ Error creating vector store: {str(e)}")
+                return False
             
             # Vector store is automatically persisted in ChromaDB 0.4.x
             # No need to call persist() manually
             
-            print("Vector store built and persisted successfully")
+            print("✅ Vector store built and persisted successfully")
             return True
             
         except Exception as e:
-            print(f"Error building vector store: {str(e)}")
+            print(f"❌ Error building vector store: {str(e)}")
             return False
 
     def _load_existing_vectorstore(self) -> bool:
@@ -255,22 +269,36 @@ Analyze if this tender matches the keywords and respond with JSON:
             sample_data = self.debugTenderData(tenders, return_info=True)
             debug_info.extend(sample_data)
             
-            # Check if we need to rebuild vector store
-            data_hash = self._get_data_hash(tenders)
-            if data_hash != self.current_data_hash:
-                debug_info.append("🔄 Data changed, rebuilding vector store...")
-                if not self._build_vectorstore(tenders):
-                    return pd.DataFrame(), debug_info
-                self.current_data_hash = data_hash
-            elif self.vectorstore is None:
-                if not self._load_existing_vectorstore():
+            # Check if vector store is available
+            if hasattr(self, 'use_vectorstore') and not self.use_vectorstore:
+                debug_info.append("🔄 Using simple keyword matching (vector store not available)")
+                # Skip vector store and go directly to simple matching
+                search_results = []
+            else:
+                # Check if we need to rebuild vector store
+                data_hash = self._get_data_hash(tenders)
+                if data_hash != self.current_data_hash:
+                    debug_info.append("🔄 Data changed, rebuilding vector store...")
                     if not self._build_vectorstore(tenders):
-                        return pd.DataFrame(), debug_info
-                    self.current_data_hash = data_hash
-            
-            # Perform enhanced similarity search
-            search_results = self._enhanced_similarity_search(keywords, k=min(20, len(tenders)))
-            debug_info.append(f"🔍 Vector search returned {len(search_results)} initial results")
+                        debug_info.append("⚠️ Vector store failed - falling back to simple matching")
+                        search_results = []
+                    else:
+                        self.current_data_hash = data_hash
+                elif self.vectorstore is None:
+                    if not self._load_existing_vectorstore():
+                        if not self._build_vectorstore(tenders):
+                            debug_info.append("⚠️ Vector store failed - falling back to simple matching")
+                            search_results = []
+                        else:
+                            self.current_data_hash = data_hash
+                
+                # Perform enhanced similarity search if vector store is available
+                if self.vectorstore is not None:
+                    search_results = self._enhanced_similarity_search(keywords, k=min(20, len(tenders)))
+                    debug_info.append(f"🔍 Vector search returned {len(search_results)} initial results")
+                else:
+                    search_results = []
+                    debug_info.append("🔍 No vector search results (vector store not available)")
             
             # Deduplicate search results by row_index to prevent processing same tender multiple times
             seen_indices = set()
@@ -380,11 +408,15 @@ Analyze if this tender matches the keywords and respond with JSON:
             # Always create fresh vector store for each processing run
             debug_info.append("🔄 Creating fresh vector store for processing...")
             self.clearVectorStore()  # Clear any existing vectorstore
-            if not self._build_vectorstore(tenders):
-                debug_info.append("❌ Failed to build vector store")
-                return {}, debug_info
             
-            debug_info.append("✅ Vector store created successfully")
+            # Try to build vector store, but fall back to simple matching if it fails
+            build_success = self._build_vectorstore(tenders)
+            if not build_success:
+                debug_info.append("⚠️ Vector store failed - using simple keyword matching only")
+                use_vectorstore = False
+            else:
+                debug_info.append("✅ Vector store created successfully")
+                use_vectorstore = True
             
             for client in clients:
                 if client.get('enabled', False):
