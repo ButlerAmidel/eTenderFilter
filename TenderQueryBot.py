@@ -18,26 +18,42 @@ class TenderQueryBot:
     def __init__(self, openaiApiKey: str = None):
         load_dotenv()
         
-        # Initialize OpenAI
-        apiKey = openaiApiKey or os.getenv('OPENAI_API_KEY')
-        if not apiKey:
+        # Store API key for lazy initialization
+        self.apiKey = openaiApiKey or os.getenv('OPENAI_API_KEY')
+        if not self.apiKey:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
         
-        self.embeddings = OpenAIEmbeddings(api_key=apiKey)
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # Better reasoning, lower cost
-            # model="gpt-3.5-turbo",  # Original model
-            temperature=0.5,
-            api_key=apiKey
-        )
-        
-        # Initialize components
+        # Initialize components (no OpenAI clients yet)
+        self.embeddings = None  # Will be initialized when needed
+        self.llm = None  # Will be initialized when needed
         self.vectorStore = None
         self.qaChain = None
         self.currentDataFile = None
-        
-        # Load the latest filtered data
-        self.loadFilteredData()
+    
+    def _initialize_embeddings(self):
+        """Initialize embeddings only when needed"""
+        if self.embeddings is None:
+            try:
+                self.embeddings = OpenAIEmbeddings(api_key=self.apiKey)
+                print("TenderQueryBot embeddings initialized successfully")
+            except Exception as e:
+                print(f"Error initializing TenderQueryBot embeddings: {str(e)}")
+                raise e
+    
+    def _initialize_llm(self):
+        """Initialize LLM only when needed"""
+        if self.llm is None:
+            try:
+                self.llm = ChatOpenAI(
+                    model="gpt-4o-mini",  # Better reasoning, lower cost
+                    # model="gpt-3.5-turbo",  # Original model
+                    temperature=0.5,
+                    api_key=self.apiKey
+                )
+                print("TenderQueryBot LLM initialized successfully")
+            except Exception as e:
+                print(f"Error initializing TenderQueryBot LLM: {str(e)}")
+                raise e
     
     def loadFilteredData(self) -> bool:
         """Load the latest filtered tender data for querying"""
@@ -68,6 +84,9 @@ class TenderQueryBot:
             
             # Create documents from DataFrame
             documents = self.createDocumentsFromDataFrame(df)
+            
+            # Initialize embeddings if needed
+            self._initialize_embeddings()
             
             # Create vector store
             self.vectorStore = Chroma.from_documents(
@@ -137,6 +156,9 @@ class TenderQueryBot:
     def createQaChain(self) -> RetrievalQA:
         """Create the QA chain for querying"""
         try:
+            # Initialize LLM if needed
+            self._initialize_llm()
+            
             # Create prompt template with better guidance
             promptTemplate = PromptTemplate(
                 input_variables=["context", "question"],

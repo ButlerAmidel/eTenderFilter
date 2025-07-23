@@ -28,6 +28,14 @@ class StreamlitApp:
     def __init__(self):
         """Initialize the Streamlit application"""
         try:
+            # Set page config FIRST (before any other Streamlit commands)
+            st.set_page_config(
+                page_title="Tender Automation System",
+                page_icon="📋",
+                layout="wide",
+                initial_sidebar_state="expanded"
+            )
+            
             st.write("🚀 Starting StreamlitApp initialization...")
             
             # Setup secrets from Streamlit Cloud
@@ -81,16 +89,6 @@ class StreamlitApp:
                 st.write("✅ QueryBot assigned to self")
             else:
                 st.write("⚠️ QueryBot will be initialized on first use")
-            
-            # Set page config
-            st.write("📄 Setting page config...")
-            st.set_page_config(
-                page_title="Tender Automation System",
-                page_icon="📋",
-                layout="wide",
-                initial_sidebar_state="expanded"
-            )
-            st.write("✅ Page config set")
             
             st.write("🎉 StreamlitApp initialization complete!")
         
