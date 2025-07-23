@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 # TenderProcessor: Handles Excel file operations for tender data including reading, validation, preparation, and saving.
 # Manages file discovery, data cleaning, and statistics generation for tender processing workflows.
 class TenderProcessor:
-    def __init__(self, dataFolderPath: str = "../eTenders/data"):
+    def __init__(self, dataFolderPath: str = "data"):
         self.dataFolderPath = dataFolderPath
         self.requiredColumns = [
             'TENDER_DESCRIPTION', 'PROVINCE', 'CATEGORY', 

@@ -38,7 +38,7 @@ venv.bak/
 *~
 
 # Project specific
-vectorstore/
+# vectorstore/  # Temporarily commented out for debugging
 chat_history.json
 email_tracking.json
 
