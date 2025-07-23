@@ -33,9 +33,8 @@ class AIFilter:
         self.tender_documents = []
         self.current_data_hash = None
         
-        # Create vector store directory
+        # Vector store directory (created only when needed)
         self.vectorstore_dir = Path("vectorstore")
-        self.vectorstore_dir.mkdir(exist_ok=True)
         
         # Initialize LLM for enhanced matching
         self.llm = ChatOpenAI(
@@ -309,18 +308,14 @@ Analyze if this tender matches the keywords and respond with JSON:
         try:
             filteredResults = {}
             
-            # Build vector store once for all clients
-            data_hash = self._get_data_hash(tenders)
-            if data_hash != self.current_data_hash:
-                print("Building vector store for batch filtering...")
-                if not self._build_vectorstore(tenders):
-                    return {}
-                self.current_data_hash = data_hash
-            elif self.vectorstore is None:
-                if not self._load_existing_vectorstore():
-                    if not self._build_vectorstore(tenders):
-                        return {}
-                    self.current_data_hash = data_hash
+            # Always create fresh vector store for each processing run
+            print("Creating fresh vector store for processing...")
+            self.clearVectorStore()  # Clear any existing vectorstore
+            if not self._build_vectorstore(tenders):
+                print("Failed to build vector store")
+                return {}
+            
+            print("Vector store created successfully")
             
             for client in clients:
                 if client.get('enabled', False):

@@ -346,6 +346,13 @@ class StreamlitApp:
             status_text.text("💾 Preparing results...")
             progress_bar.progress(90)
             
+            # Step 7: Clean up vectorstore
+            status_text.text("🧹 Cleaning up...")
+            progress_bar.progress(95)
+            
+            # Clear vectorstore to prevent compatibility issues
+            self.aiFilter.clearVectorStore()
+            
             # Combine all filtered results into one DataFrame
             combinedData = []
             for clientName, clientTenders in filteredResults.items():
@@ -554,47 +561,24 @@ class StreamlitApp:
         st.subheader("AI Filter Status")
         
         try:
-            # Check vector store
-            vectorstore_dir = Path("vectorstore")
-            if vectorstore_dir.exists() and any(vectorstore_dir.iterdir()):
-                st.success("✅ Vector store ready")
-                
-                # Show vector store info
-                try:
-                    from langchain_community.vectorstores import Chroma
-                    from langchain_openai import OpenAIEmbeddings
-                    
-                    vectorstore = Chroma(
-                        persist_directory=str(vectorstore_dir),
-                        embedding_function=OpenAIEmbeddings()
-                    )
-                    
-                    # Get collection info
-                    collection = vectorstore._collection
-                    count = collection.count()
-                    st.info(f"📊 Vector store contains {count} tender embeddings")
-                    
-                except Exception as e:
-                    st.warning(f"⚠️ Could not read vector store details: {str(e)}")
-                    
-                    # Add button to clear vectorstore if there's an error
-                    if st.button("🗑️ Clear Vector Store (Fix Compatibility Issue)"):
-                        try:
-                            import shutil
-                            if vectorstore_dir.exists():
-                                shutil.rmtree(vectorstore_dir)
-                                st.success("✅ Vector store cleared successfully!")
-                                st.rerun()
-                        except Exception as clear_error:
-                            st.error(f"❌ Error clearing vector store: {str(clear_error)}")
-            else:
-                st.info("💾 No vector store found - will build on first processing run")
-            
-            # Check OpenAI
+            # Check OpenAI API
             if os.getenv('OPENAI_API_KEY'):
                 st.success("✅ OpenAI API configured")
             else:
                 st.error("❌ OpenAI API key not configured")
+            
+            # Check AI Filter components
+            if hasattr(self, 'aiFilter') and self.aiFilter is not None:
+                st.success("✅ AI Filter initialized")
+            else:
+                st.warning("⚠️ AI Filter not initialized")
+            
+            # Vector store info (simplified)
+            vectorstore_dir = Path("vectorstore")
+            if vectorstore_dir.exists() and any(vectorstore_dir.iterdir()):
+                st.info("💾 Vector store exists (will be recreated on next processing run)")
+            else:
+                st.info("💾 No vector store found - will be created during processing")
                 
         except Exception as e:
             st.error(f"❌ AI Filter error: {str(e)}")
