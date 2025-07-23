@@ -55,12 +55,12 @@ class StreamlitApp:
             
             page = st.sidebar.radio(
                 "Navigation",
-                ["Query Bot", "Configuration", "System Status"]
+                ["Dashboard", "Configuration", "System Status"]
             )
             
             # Page routing
-            if page == "Query Bot":
-                self.showQueryBot()
+            if page == "Dashboard":
+                self.showDashboard()
             elif page == "Configuration":
                 self.showConfiguration()
             elif page == "System Status":
@@ -69,9 +69,9 @@ class StreamlitApp:
         except Exception as e:
             st.error(f"Application error: {str(e)}")
     
-    def showQueryBot(self):
-        """Show the tender query bot interface with dashboard info"""
-        st.title("Tender Query Bot")
+    def showDashboard(self):
+        """Show the dashboard interface with query bot and daily process"""
+        st.title("Dashboard")
         
         # Dashboard section at the top
         st.subheader("System Overview")
@@ -92,6 +92,60 @@ class StreamlitApp:
                 st.markdown(f"**Latest File:** {filename}")
             else:
                 st.markdown("**Latest File:** Not Found")
+        
+        # Daily Process Section
+        st.subheader("🔄 Daily Process")
+        
+        # Check if processing is already running
+        if "processing_status" not in st.session_state:
+            st.session_state.processing_status = "idle"
+        
+        if st.session_state.processing_status == "running":
+            st.warning("⚠️ Processing is currently running...")
+        else:
+            # Get latest tender file info
+            latestFile = self.tenderProcessor.getLatestTenderFile()
+            
+            if latestFile:
+                st.success(f"✅ Found tender file: {latestFile.split('/')[-1]}")
+                
+                # Show file info
+                try:
+                    df = self.tenderProcessor.readExcelFile(latestFile)
+                    st.info(f"📊 File contains {len(df)} tenders")
+                    
+                    # Run daily process button
+                    if st.button("🚀 Run Daily Process", type="primary", use_container_width=True):
+                        self._runDailyProcess()
+                        
+                except Exception as e:
+                    st.error(f"❌ Error reading file: {str(e)}")
+            else:
+                st.error("❌ No tender files found in data folder")
+        
+        # Show processing results if available
+        if "processing_results" in st.session_state:
+            st.subheader("📊 Processing Results")
+            results = st.session_state.processing_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Clients", results.get('totalClients', 0))
+            with col2:
+                st.metric("Clients with Matches", results.get('clientsWithMatches', 0))
+            with col3:
+                st.metric("Total Tenders", results.get('totalTenders', 0))
+            
+            # Download button
+            if "filtered_data" in st.session_state:
+                st.download_button(
+                    "📥 Download Filtered Results",
+                    st.session_state.filtered_data,
+                    "filtered_tenders.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        
+        st.divider()
         
         # Client tender summary
         st.subheader("Client Tender Summary")
@@ -189,6 +243,93 @@ class StreamlitApp:
         if st.button("🗑️ Clear Chat"):
             st.session_state.messages = []
             st.rerun()
+    
+    def _runDailyProcess(self):
+        """Run the daily tender processing workflow"""
+        try:
+            st.session_state.processing_status = "running"
+            
+            # Create progress bar and status
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # Step 1: Get latest tender file
+            status_text.text("📁 Finding latest tender file...")
+            progress_bar.progress(10)
+            
+            latestFile = self.tenderProcessor.getLatestTenderFile()
+            if not latestFile:
+                st.error("No tender file found")
+                st.session_state.processing_status = "idle"
+                return
+            
+            # Step 2: Read and prepare data
+            status_text.text("📊 Reading and preparing tender data...")
+            progress_bar.progress(20)
+            
+            tenderData = self.tenderProcessor.readExcelFile(latestFile)
+            preparedData = self.tenderProcessor.prepareForFiltering(tenderData)
+            
+            # Step 3: Get client configurations
+            status_text.text("⚙️ Loading client configurations...")
+            progress_bar.progress(30)
+            
+            enabledClients = self.configManager.getEnabledClients()
+            
+            # Step 4: Run AI filtering
+            status_text.text("🤖 Running AI filtering...")
+            progress_bar.progress(50)
+            
+            filteredResults = self.aiFilter.batchFilter(preparedData, enabledClients)
+            
+            # Step 5: Generate statistics
+            status_text.text("📈 Generating statistics...")
+            progress_bar.progress(80)
+            
+            stats = self.aiFilter.getFilteringStats(filteredResults)
+            
+            # Step 6: Prepare results for download
+            status_text.text("💾 Preparing results...")
+            progress_bar.progress(90)
+            
+            # Combine all filtered results into one DataFrame
+            combinedData = []
+            for clientName, clientTenders in filteredResults.items():
+                if not clientTenders.empty:
+                    clientTendersCopy = clientTenders.copy()
+                    clientTendersCopy['CLIENT_MATCH'] = clientName
+                    combinedData.append(clientTendersCopy)
+            
+            if combinedData:
+                finalDf = pd.concat(combinedData, ignore_index=True)
+                finalDf = finalDf.sort_values(['CLIENT_MATCH', 'TENDER_ID'])
+                
+                # Convert to Excel bytes for download
+                import io
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    finalDf.to_excel(writer, index=False, sheet_name='Filtered Tenders')
+                output.seek(0)
+                
+                # Store results in session state
+                st.session_state.filtered_data = output.getvalue()
+                st.session_state.processing_results = stats
+                
+                progress_bar.progress(100)
+                status_text.text("✅ Processing complete!")
+                
+                st.success(f"✅ Successfully processed {len(finalDf)} tenders for {len([k for k, v in filteredResults.items() if not v.empty])} clients!")
+                
+            else:
+                st.warning("⚠️ No tenders matched the filtering criteria")
+                st.session_state.processing_results = stats
+            
+            # Clear status
+            st.session_state.processing_status = "idle"
+            
+        except Exception as e:
+            st.error(f"❌ Processing error: {str(e)}")
+            st.session_state.processing_status = "idle"
     
     def showConfiguration(self):
         """Show configuration management interface"""
