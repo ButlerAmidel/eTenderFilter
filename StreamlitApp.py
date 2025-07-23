@@ -326,7 +326,7 @@ class StreamlitApp:
         # File system status
         st.subheader("File System Status")
         
-        dataFolder = Path("../eTenders/data")
+        dataFolder = Path("data")
         if dataFolder.exists():
             excelFiles = list(dataFolder.glob("tenders_*.xlsx"))
             st.success(f"✅ Data folder found with {len(excelFiles)} Excel files")
@@ -381,6 +381,17 @@ class StreamlitApp:
                     
                 except Exception as e:
                     st.warning(f"⚠️ Could not read vector store details: {str(e)}")
+                    
+                    # Add button to clear vectorstore if there's an error
+                    if st.button("🗑️ Clear Vector Store (Fix Compatibility Issue)"):
+                        try:
+                            import shutil
+                            if vectorstore_dir.exists():
+                                shutil.rmtree(vectorstore_dir)
+                                st.success("✅ Vector store cleared successfully!")
+                                st.rerun()
+                        except Exception as clear_error:
+                            st.error(f"❌ Error clearing vector store: {str(clear_error)}")
             else:
                 st.info("💾 No vector store found - will build on first processing run")
             
