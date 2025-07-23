@@ -16,7 +16,7 @@ from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
 class AIFilter:
-    def __init__(self, openaiApiKey: str = None, confidenceThreshold: float = 0.5):
+    def __init__(self, openaiApiKey: str = None, confidenceThreshold: float = 0.3):
         load_dotenv()
         
         # Store API key for lazy initialization
@@ -250,6 +250,9 @@ Analyze if this tender matches the keywords and respond with JSON:
             print(f"Using keywords: {keywords}")
             print(f"Processing {len(tenders)} tenders...")
             
+            # Debug: Show sample tender data
+            self.debugTenderData(tenders)
+            
             # Check if we need to rebuild vector store
             data_hash = self._get_data_hash(tenders)
             if data_hash != self.current_data_hash:
@@ -265,6 +268,7 @@ Analyze if this tender matches the keywords and respond with JSON:
             
             # Perform enhanced similarity search
             search_results = self._enhanced_similarity_search(keywords, k=min(20, len(tenders)))
+            print(f"Vector search returned {len(search_results)} initial results")
             
             # Deduplicate search results by row_index to prevent processing same tender multiple times
             seen_indices = set()
@@ -277,6 +281,43 @@ Analyze if this tender matches the keywords and respond with JSON:
                     unique_results.append((doc, similarity_score))
             
             print(f"Found {len(search_results)} total results, {len(unique_results)} unique tenders after deduplication")
+            
+            if len(unique_results) == 0:
+                print(f"⚠️ No vector search results found for client {clientName} with keywords: {keywords}")
+                print("🔄 Trying simple keyword matching as fallback...")
+                
+                # Simple keyword matching fallback
+                simple_matches = []
+                for index, tender in tenders.iterrows():
+                    description = tender.get('TENDER_DESCRIPTION', '').lower()
+                    category = tender.get('CATEGORY', '').lower()
+                    content = f"{description} {category}"
+                    
+                    # Check if any keyword matches
+                    for keyword in keywords:
+                        if keyword.lower() in content:
+                            simple_matches.append((index, tender, 0.8))  # High confidence for exact matches
+                            break
+                
+                print(f"Simple keyword matching found {len(simple_matches)} matches")
+                
+                if simple_matches:
+                    filteredTenders = []
+                    for index, tender, confidence in simple_matches:
+                        tenderCopy = tender.copy()
+                        tenderCopy['SIMILARITY_SCORE'] = 0.8
+                        tenderCopy['AI_CONFIDENCE'] = confidence
+                        tenderCopy['COMBINED_SCORE'] = confidence
+                        tenderCopy['BEST_MATCH_KEYWORD'] = "Simple keyword match"
+                        tenderCopy['AI_REASONING'] = "Matched via simple keyword search"
+                        filteredTenders.append(tenderCopy)
+                    
+                    if filteredTenders:
+                        resultDf = pd.DataFrame(filteredTenders)
+                        print(f"Simple matching found {len(resultDf)} matches for {clientName}")
+                        return resultDf
+                
+                return pd.DataFrame()
             
             filteredTenders = []
             
@@ -291,6 +332,8 @@ Analyze if this tender matches the keywords and respond with JSON:
                     
                     # Combine similarity score with AI confidence (weighted towards AI confidence)
                     combined_score = (similarity_score * 0.3 + ai_result['confidence'] * 0.7)
+                    
+                    print(f"Tender {tender.get('TENDER_ID', 'N/A')}: Similarity={similarity_score:.3f}, AI_Confidence={ai_result['confidence']:.3f}, Combined={combined_score:.3f}, AI_Matches={ai_result['matches']}")
                     
                     # Check if meets threshold and AI explicitly matches
                     if combined_score >= self.confidenceThreshold and ai_result['matches'] and ai_result['confidence'] >= 0.6:
@@ -473,4 +516,16 @@ Analyze if this tender matches the keywords and respond with JSON:
             
             return info
         except Exception as e:
-            return {'error': str(e)} 
+            return {'error': str(e)}
+    
+    def debugTenderData(self, tenders: pd.DataFrame, max_samples: int = 3) -> None:
+        """Debug method to show sample tender data"""
+        print(f"\n🔍 DEBUG: Sample tender data ({len(tenders)} total tenders):")
+        for i in range(min(max_samples, len(tenders))):
+            tender = tenders.iloc[i]
+            print(f"\nTender {i+1}:")
+            print(f"  ID: {tender.get('TENDER_ID', 'N/A')}")
+            print(f"  Description: {tender.get('TENDER_DESCRIPTION', 'N/A')[:100]}...")
+            print(f"  Category: {tender.get('CATEGORY', 'N/A')}")
+            print(f"  Province: {tender.get('PROVINCE', 'N/A')}")
+        print("\n" + "="*50) 
