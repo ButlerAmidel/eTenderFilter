@@ -23,27 +23,76 @@ class StreamlitApp:
     def __init__(self):
         """Initialize the Streamlit application"""
         try:
+            st.write("🚀 Starting StreamlitApp initialization...")
+            
+            # Setup secrets from Streamlit Cloud
+            st.write("🔐 Setting up secrets...")
+            self._setupSecrets()
+            st.write("✅ Secrets setup complete")
+            
+            st.write("⚙️ Initializing ConfigManager...")
             self.configManager = ConfigManager()
+            st.write("✅ ConfigManager initialized")
+            
+            st.write("📁 Initializing TenderProcessor...")
             self.tenderProcessor = TenderProcessor()
+            st.write("✅ TenderProcessor initialized")
+            
+            st.write("🤖 Initializing AIFilter...")
             self.aiFilter = AIFilter()
+            st.write("✅ AIFilter initialized")
+            
+            st.write("📧 Initializing EmailSender...")
             self.emailSender = EmailSender()
+            st.write("✅ EmailSender initialized")
             
             # Initialize queryBot only once using session state
             if "queryBot" not in st.session_state:
-                st.session_state.queryBot = TenderQueryBot()
+                try:
+                    st.write("🔍 Initializing TenderQueryBot...")
+                    st.session_state.queryBot = TenderQueryBot()
+                    st.write("✅ TenderQueryBot initialized successfully")
+                except Exception as e:
+                    st.write(f"❌ Error initializing TenderQueryBot: {str(e)}")
+                    # Don't raise the error - just log it and continue
+                    # The query bot will be initialized on first use
+                    st.warning("⚠️ QueryBot initialization failed - will retry on first use")
+                    st.session_state.queryBot = None
             
             self.queryBot = st.session_state.queryBot
+            if self.queryBot:
+                st.write("✅ QueryBot assigned to self")
+            else:
+                st.write("⚠️ QueryBot will be initialized on first use")
             
             # Set page config
+            st.write("📄 Setting page config...")
             st.set_page_config(
                 page_title="Tender Automation System",
                 page_icon="📋",
                 layout="wide",
                 initial_sidebar_state="expanded"
             )
+            st.write("✅ Page config set")
+            
+            st.write("🎉 StreamlitApp initialization complete!")
         
         except Exception as e:
             st.error(f"Error initializing app: {str(e)}")
+    
+    def _setupSecrets(self):
+        """Setup environment variables from Streamlit secrets if available"""
+        try:
+            if hasattr(st, 'secrets'):
+                # Load secrets into environment variables for compatibility
+                if 'OPENAI_API_KEY' in st.secrets:
+                    os.environ['OPENAI_API_KEY'] = st.secrets['OPENAI_API_KEY']
+                if 'SENDER_EMAIL' in st.secrets:
+                    os.environ['SENDER_EMAIL'] = st.secrets['SENDER_EMAIL']
+                if 'SENDER_PASSWORD' in st.secrets:
+                    os.environ['SENDER_PASSWORD'] = st.secrets['SENDER_PASSWORD']
+        except Exception as e:
+            print(f"Error setting up secrets: {str(e)}")
     
 
     
@@ -247,6 +296,11 @@ class StreamlitApp:
     def _runDailyProcess(self):
         """Run the daily tender processing workflow"""
         try:
+            # Check if aiFilter is available
+            if not hasattr(self, 'aiFilter') or self.aiFilter is None:
+                st.error("❌ AIFilter is not initialized. Please refresh the page and try again.")
+                return
+            
             st.session_state.processing_status = "running"
             
             # Create progress bar and status
