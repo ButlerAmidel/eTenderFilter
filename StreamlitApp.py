@@ -349,7 +349,12 @@ class StreamlitApp:
             status_text.text("🤖 Running AI filtering...")
             progress_bar.progress(50)
             
-            filteredResults = self.aiFilter.batchFilter(preparedData, enabledClients)
+            filteredResults, debug_info = self.aiFilter.batchFilter(preparedData, enabledClients)
+            
+            # Display debug information
+            st.subheader("🔍 Debug Information")
+            for debug_line in debug_info:
+                st.text(debug_line)
             
             # Step 5: Generate statistics
             status_text.text("📈 Generating statistics...")

@@ -245,30 +245,32 @@ Analyze if this tender matches the keywords and respond with JSON:
         try:
             clientName = clientConfig['name']
             keywords = clientConfig['keywords']
+            debug_info = []
             
-            print(f"Filtering tenders for client: {clientName}")
-            print(f"Using keywords: {keywords}")
-            print(f"Processing {len(tenders)} tenders...")
+            debug_info.append(f"🔍 Filtering tenders for client: {clientName}")
+            debug_info.append(f"📝 Using keywords: {', '.join(keywords)}")
+            debug_info.append(f"📊 Processing {len(tenders)} tenders...")
             
             # Debug: Show sample tender data
-            self.debugTenderData(tenders)
+            sample_data = self.debugTenderData(tenders, return_info=True)
+            debug_info.extend(sample_data)
             
             # Check if we need to rebuild vector store
             data_hash = self._get_data_hash(tenders)
             if data_hash != self.current_data_hash:
-                print("Data changed, rebuilding vector store...")
+                debug_info.append("🔄 Data changed, rebuilding vector store...")
                 if not self._build_vectorstore(tenders):
-                    return pd.DataFrame()
+                    return pd.DataFrame(), debug_info
                 self.current_data_hash = data_hash
             elif self.vectorstore is None:
                 if not self._load_existing_vectorstore():
                     if not self._build_vectorstore(tenders):
-                        return pd.DataFrame()
+                        return pd.DataFrame(), debug_info
                     self.current_data_hash = data_hash
             
             # Perform enhanced similarity search
             search_results = self._enhanced_similarity_search(keywords, k=min(20, len(tenders)))
-            print(f"Vector search returned {len(search_results)} initial results")
+            debug_info.append(f"🔍 Vector search returned {len(search_results)} initial results")
             
             # Deduplicate search results by row_index to prevent processing same tender multiple times
             seen_indices = set()
@@ -280,11 +282,11 @@ Analyze if this tender matches the keywords and respond with JSON:
                     seen_indices.add(row_index)
                     unique_results.append((doc, similarity_score))
             
-            print(f"Found {len(search_results)} total results, {len(unique_results)} unique tenders after deduplication")
+            debug_info.append(f"📊 Found {len(search_results)} total results, {len(unique_results)} unique tenders after deduplication")
             
             if len(unique_results) == 0:
-                print(f"⚠️ No vector search results found for client {clientName} with keywords: {keywords}")
-                print("🔄 Trying simple keyword matching as fallback...")
+                debug_info.append(f"⚠️ No vector search results found for client {clientName} with keywords: {keywords}")
+                debug_info.append("🔄 Trying simple keyword matching as fallback...")
                 
                 # Simple keyword matching fallback
                 simple_matches = []
@@ -299,7 +301,7 @@ Analyze if this tender matches the keywords and respond with JSON:
                             simple_matches.append((index, tender, 0.8))  # High confidence for exact matches
                             break
                 
-                print(f"Simple keyword matching found {len(simple_matches)} matches")
+                debug_info.append(f"🔍 Simple keyword matching found {len(simple_matches)} matches")
                 
                 if simple_matches:
                     filteredTenders = []
@@ -314,10 +316,10 @@ Analyze if this tender matches the keywords and respond with JSON:
                     
                     if filteredTenders:
                         resultDf = pd.DataFrame(filteredTenders)
-                        print(f"Simple matching found {len(resultDf)} matches for {clientName}")
-                        return resultDf
+                        debug_info.append(f"✅ Simple matching found {len(resultDf)} matches for {clientName}")
+                        return resultDf, debug_info
                 
-                return pd.DataFrame()
+                return pd.DataFrame(), debug_info
             
             filteredTenders = []
             
@@ -333,7 +335,7 @@ Analyze if this tender matches the keywords and respond with JSON:
                     # Combine similarity score with AI confidence (weighted towards AI confidence)
                     combined_score = (similarity_score * 0.3 + ai_result['confidence'] * 0.7)
                     
-                    print(f"Tender {tender.get('TENDER_ID', 'N/A')}: Similarity={similarity_score:.3f}, AI_Confidence={ai_result['confidence']:.3f}, Combined={combined_score:.3f}, AI_Matches={ai_result['matches']}")
+                    debug_info.append(f"🔍 Tender {tender.get('TENDER_ID', 'N/A')}: Similarity={similarity_score:.3f}, AI_Confidence={ai_result['confidence']:.3f}, Combined={combined_score:.3f}, AI_Matches={ai_result['matches']}")
                     
                     # Check if meets threshold and AI explicitly matches
                     if combined_score >= self.confidenceThreshold and ai_result['matches'] and ai_result['confidence'] >= 0.6:
@@ -346,7 +348,7 @@ Analyze if this tender matches the keywords and respond with JSON:
                         tenderCopy['AI_REASONING'] = ai_result.get('reasoning', '')
                         filteredTenders.append(tenderCopy)
                         
-                        print(f"Match found: {tender['TENDER_ID']} - Combined Score: {combined_score:.3f} - AI Confidence: {ai_result['confidence']:.3f}")
+                        debug_info.append(f"✅ Match found: {tender['TENDER_ID']} - Combined Score: {combined_score:.3f} - AI Confidence: {ai_result['confidence']:.3f}")
             
             if filteredTenders:
                 resultDf = pd.DataFrame(filteredTenders)
@@ -357,48 +359,53 @@ Analyze if this tender matches the keywords and respond with JSON:
                     resultDf = resultDf.drop_duplicates(subset=['TENDER_ID'], keep='first')
                     final_count = len(resultDf)
                     if original_count != final_count:
-                        print(f"Removed {original_count - final_count} duplicate TENDER_IDs from final results")
+                        debug_info.append(f"🔄 Removed {original_count - final_count} duplicate TENDER_IDs from final results")
                 
-                print(f"Found {len(resultDf)} unique matches for {clientName}")
-                return resultDf
+                debug_info.append(f"✅ Found {len(resultDf)} unique matches for {clientName}")
+                return resultDf, debug_info
             else:
-                print(f"No matches found for {clientName}")
-                return pd.DataFrame()
+                debug_info.append(f"❌ No matches found for {clientName}")
+                return pd.DataFrame(), debug_info
         
         except Exception as e:
-            print(f"Error filtering tenders for {clientName}: {str(e)}")
-            return pd.DataFrame()
+            debug_info.append(f"❌ Error filtering tenders for {clientName}: {str(e)}")
+            return pd.DataFrame(), debug_info
 
     def batchFilter(self, tenders: pd.DataFrame, clients: List[Dict[str, Any]]) -> Dict[str, pd.DataFrame]:
         """Filter tenders for all clients using LangChain RAG"""
         try:
             filteredResults = {}
+            debug_info = []  # Collect debug information
             
             # Always create fresh vector store for each processing run
-            print("Creating fresh vector store for processing...")
+            debug_info.append("🔄 Creating fresh vector store for processing...")
             self.clearVectorStore()  # Clear any existing vectorstore
             if not self._build_vectorstore(tenders):
-                print("Failed to build vector store")
-                return {}
+                debug_info.append("❌ Failed to build vector store")
+                return {}, debug_info
             
-            print("Vector store created successfully")
+            debug_info.append("✅ Vector store created successfully")
             
             for client in clients:
                 if client.get('enabled', False):
                     clientName = client['name']
-                    print(f"\nProcessing client: {clientName}")
+                    debug_info.append(f"\n🔍 Processing client: {clientName}")
                     
-                    clientResults = self.filterTendersForClient(tenders, client)
+                    clientResults, client_debug = self.filterTendersForClient(tenders, client)
+                    debug_info.extend(client_debug)
+                    
                     if not clientResults.empty:
                         filteredResults[clientName] = clientResults
+                        debug_info.append(f"✅ Found {len(clientResults)} matches for {clientName}")
                     else:
                         filteredResults[clientName] = pd.DataFrame()
+                        debug_info.append(f"❌ No matches found for {clientName}")
             
-            return filteredResults
+            return filteredResults, debug_info
         
         except Exception as e:
-            print(f"Error in batch filtering: {str(e)}")
-            return {}
+            debug_info = [f"❌ Error in batch filtering: {str(e)}"]
+            return {}, debug_info
 
     def getFilteringStats(self, filteredResults: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
         """Get statistics about filtering results"""
@@ -518,14 +525,27 @@ Analyze if this tender matches the keywords and respond with JSON:
         except Exception as e:
             return {'error': str(e)}
     
-    def debugTenderData(self, tenders: pd.DataFrame, max_samples: int = 3) -> None:
+    def debugTenderData(self, tenders: pd.DataFrame, max_samples: int = 3, return_info: bool = False) -> None:
         """Debug method to show sample tender data"""
-        print(f"\n🔍 DEBUG: Sample tender data ({len(tenders)} total tenders):")
-        for i in range(min(max_samples, len(tenders))):
-            tender = tenders.iloc[i]
-            print(f"\nTender {i+1}:")
-            print(f"  ID: {tender.get('TENDER_ID', 'N/A')}")
-            print(f"  Description: {tender.get('TENDER_DESCRIPTION', 'N/A')[:100]}...")
-            print(f"  Category: {tender.get('CATEGORY', 'N/A')}")
-            print(f"  Province: {tender.get('PROVINCE', 'N/A')}")
-        print("\n" + "="*50) 
+        if return_info:
+            debug_info = []
+            debug_info.append(f"\n🔍 DEBUG: Sample tender data ({len(tenders)} total tenders):")
+            for i in range(min(max_samples, len(tenders))):
+                tender = tenders.iloc[i]
+                debug_info.append(f"\n📋 Tender {i+1}:")
+                debug_info.append(f"  ID: {tender.get('TENDER_ID', 'N/A')}")
+                debug_info.append(f"  Description: {tender.get('TENDER_DESCRIPTION', 'N/A')[:100]}...")
+                debug_info.append(f"  Category: {tender.get('CATEGORY', 'N/A')}")
+                debug_info.append(f"  Province: {tender.get('PROVINCE', 'N/A')}")
+            debug_info.append("\n" + "="*50)
+            return debug_info
+        else:
+            print(f"\n🔍 DEBUG: Sample tender data ({len(tenders)} total tenders):")
+            for i in range(min(max_samples, len(tenders))):
+                tender = tenders.iloc[i]
+                print(f"\nTender {i+1}:")
+                print(f"  ID: {tender.get('TENDER_ID', 'N/A')}")
+                print(f"  Description: {tender.get('TENDER_DESCRIPTION', 'N/A')[:100]}...")
+                print(f"  Category: {tender.get('CATEGORY', 'N/A')}")
+                print(f"  Province: {tender.get('PROVINCE', 'N/A')}")
+            print("\n" + "="*50) 
