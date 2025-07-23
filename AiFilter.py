@@ -19,33 +19,22 @@ class AIFilter:
     def __init__(self, openaiApiKey: str = None, confidenceThreshold: float = 0.5):
         load_dotenv()
         
-        # Initialize OpenAI client
-        apiKey = openaiApiKey or os.getenv('OPENAI_API_KEY')
-        if not apiKey:
+        # Store API key for lazy initialization
+        self.apiKey = openaiApiKey or os.getenv('OPENAI_API_KEY')
+        if not self.apiKey:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable or pass it to constructor.")
         
-        self.client = openai.OpenAI(api_key=apiKey)
         self.confidenceThreshold = confidenceThreshold
         
-        # Store API key for lazy initialization
-        self.apiKey = apiKey
-        
-        # Initialize basic components
+        # Initialize basic components (no OpenAI clients yet)
         self.embeddings = None  # Will be initialized when needed
         self.vectorstore = None
+        self.llm = None  # Will be initialized when needed
         self.tender_documents = []
         self.current_data_hash = None
         
         # Vector store directory (created only when needed)
         self.vectorstore_dir = Path("vectorstore")
-        
-        # Initialize LLM for enhanced matching
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # Better reasoning, lower cost than 3.5-turbo
-            # model="gpt-3.5-turbo",  # Original model
-            temperature=0.3,
-            api_key=apiKey
-        )
         
         # System prompt for tender matching
         self.system_prompt = """You are a tender matching assistant. Your job is to analyze tender descriptions and determine if they match specific keywords.
@@ -113,6 +102,21 @@ Closing Date: {tender.get('CLOSING_DATE', 'N/A')}
                 print("Embeddings initialized successfully")
             except Exception as e:
                 print(f"Error initializing embeddings: {str(e)}")
+                raise e
+    
+    def _initialize_llm(self):
+        """Initialize LLM only when needed"""
+        if self.llm is None:
+            try:
+                self.llm = ChatOpenAI(
+                    model="gpt-4o-mini",  # Better reasoning, lower cost than 3.5-turbo
+                    # model="gpt-3.5-turbo",  # Original model
+                    temperature=0.3,
+                    api_key=self.apiKey
+                )
+                print("LLM initialized successfully")
+            except Exception as e:
+                print(f"Error initializing LLM: {str(e)}")
                 raise e
     
     def _get_data_hash(self, tenders: pd.DataFrame) -> str:
@@ -194,6 +198,9 @@ Closing Date: {tender.get('CLOSING_DATE', 'N/A')}
     def _ai_enhanced_matching(self, tender_content: str, keywords: List[str]) -> Dict[str, Any]:
         """Use AI to enhance matching beyond simple similarity"""
         try:
+            # Initialize LLM if not already
+            self._initialize_llm()
+            
             # Create the prompt directly
             prompt_text = f"""
 {self.system_prompt}

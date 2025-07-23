@@ -14,6 +14,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from ConfigManager import ConfigManager
 from TenderProcessor import TenderProcessor
 from AiFilter import AIFilter
+try:
+    from AiFilterSimple import SimpleAIFilter
+    SIMPLE_FILTER_AVAILABLE = True
+except ImportError:
+    SIMPLE_FILTER_AVAILABLE = False
 from EmailSender import EmailSender
 from TenderQueryBot import TenderQueryBot
 
@@ -39,8 +44,20 @@ class StreamlitApp:
             st.write("✅ TenderProcessor initialized")
             
             st.write("🤖 Initializing AIFilter...")
-            self.aiFilter = AIFilter()
-            st.write("✅ AIFilter initialized")
+            try:
+                self.aiFilter = AIFilter()
+                self.useSimpleFilter = False
+                st.write("✅ AIFilter initialized (using vectorstore)")
+            except Exception as e:
+                st.write(f"❌ AIFilter initialization failed: {str(e)}")
+                if SIMPLE_FILTER_AVAILABLE:
+                    st.write("🔄 Falling back to SimpleAIFilter...")
+                    self.aiFilter = SimpleAIFilter()
+                    self.useSimpleFilter = True
+                    st.write("✅ SimpleAIFilter initialized (no vectorstore)")
+                else:
+                    st.error("❌ Both AIFilter and SimpleAIFilter failed to initialize")
+                    raise e
             
             st.write("📧 Initializing EmailSender...")
             self.emailSender = EmailSender()
@@ -346,12 +363,13 @@ class StreamlitApp:
             status_text.text("💾 Preparing results...")
             progress_bar.progress(90)
             
-            # Step 7: Clean up vectorstore
+            # Step 7: Clean up
             status_text.text("🧹 Cleaning up...")
             progress_bar.progress(95)
             
-            # Clear vectorstore to prevent compatibility issues
-            self.aiFilter.clearVectorStore()
+            # Clear vectorstore to prevent compatibility issues (only for vectorstore filter)
+            if hasattr(self, 'useSimpleFilter') and not self.useSimpleFilter:
+                self.aiFilter.clearVectorStore()
             
             # Combine all filtered results into one DataFrame
             combinedData = []
@@ -569,7 +587,10 @@ class StreamlitApp:
             
             # Check AI Filter components
             if hasattr(self, 'aiFilter') and self.aiFilter is not None:
-                st.success("✅ AI Filter initialized")
+                if hasattr(self, 'useSimpleFilter') and self.useSimpleFilter:
+                    st.success("✅ Simple AI Filter initialized (no vectorstore)")
+                else:
+                    st.success("✅ AI Filter initialized (with vectorstore)")
             else:
                 st.warning("⚠️ AI Filter not initialized")
             
